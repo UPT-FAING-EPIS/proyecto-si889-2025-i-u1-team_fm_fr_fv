@@ -33,21 +33,21 @@ jobs:
         run: dotnet restore ${{ env.SOLUTION_PATH }}
 
       # Análisis Semgrep (para código fuente)
-      - name: Run Semgrep on solution
-        run: |
-          docker pull semgrep/semgrep
-          docker run --rm -v $(pwd):/src semgrep/semgrep scan \
-            --config="p/csharp" \
-            --exclude="**/Migrations/**" \
-            --json --output semgrep.json \
-            --metrics=off \
-            DictApp/
+      - name: Run Semgrep Scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/csharp
+          paths: DictApp/
+          exclude: "**/Migrations/**"
+          output_file: semgrep-results.json
+          sarif: false
+          verbose: true
 
       - name: Convert Semgrep results
         run: |
           python -m pip install prospector2html
-          if [ -f "semgrep.json" ]; then
-            prospector-html --input semgrep.json --output semgrep-report.html --filter semgrep
+          if [ -f "semgrep-results.json" ]; then
+            prospector-html --input semgrep-results.json --output semgrep-report.html --filter semgrep
           else
             echo '{"results": []}' > semgrep-report.html
           fi
@@ -121,5 +121,5 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.G_TOKEN }}
           publish_dir: public

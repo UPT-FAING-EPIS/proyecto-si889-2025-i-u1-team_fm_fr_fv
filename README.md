@@ -43,4 +43,80 @@ Desarrollar una aplicación capaz de conectarse a bases de datos relacionales pa
 
 ---
 
+
+## Despliegue: GitHub + Azure
+
+### Pre-requisitos
+- Azure Subscription
+- GitHub Account
+- Terraform ≥ 1.0
+- .NET SDK 8.0
+- Node.js ≥ 18.0
+
+### Configuración Azure
+
+```bash
+az ad sp create-for-rbac --name "GitHubActionsDataDicGen" --role contributor \
+  --scopes /subscriptions/{ID-SUSCRIPCION} --sdk-auth
+```
+
+### Secretos GitHub
+- AZURE_CREDENTIALS → Service Principal (JSON)
+- SUBSCRIPTION_ID → ID de suscripción Azure
+- SQL_USER → Admin SQL
+- SQL_PASS → Password SQL
+
+### Infraestructura
+
+El `main.tf` despliega:
+- Resource Group: `upt-arg-xxx`
+- SQL Server + Database: `upt-dbs-xxx`
+- App Service Plan: `upt-asp-xxx` (F1)
+- Web App: `datagen-api-xxx` (.NET 8)
+
+### Pipeline de Despliegue
+
+1. **Terraform apply** → 5-10 min
+2. **Build Backend** → Restore, Build, Publish
+3. **Build Frontend** → npm install, build
+4. **Deploy to Azure** → Web App deploy
+
+### Monitoreo y Logs
+
+- Azure Portal → App Service → Logs
+- Application Insights → Performance
+
+### Conexión BD
+
+```
+Server={server}.database.windows.net;
+Database=DataDicGenDATABASE;
+User={SQL_USER};Password={SQL_PASS};
+TrustServerCertificate=True;
+```
+
+### Estructura Principal
+```
+DataDictGen.sln
+├── Application  → Servicios, DTOs
+├── Domain       → Entidades core
+├── Frontend     → React/TypeScript
+├── Infrastructure → Persistencia, migraciones
+├── WebAPI       → Controllers API
+└── Tests        → Testing
+```
+
+### Troubleshooting Rápido
+
+| Problema | Acción |
+|----------|--------|
+| Error 503 | Revisar logs App Service |
+| Fallo BD | Verificar credenciales y firewall |
+| CI/CD | Revisar GitHub Actions logs |
+
+---
+
+*Team FM_FR_FV - UPT 2025*
+
+
 </center>

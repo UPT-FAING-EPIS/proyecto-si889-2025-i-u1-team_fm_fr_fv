@@ -1,131 +1,128 @@
 name: Security Analysis
 
 env:
-  DOTNET_VERSION: '8.0.x'
-  SOLUTION_PATH: 'DictApp/DataDictGen.sln'
+  DOTNET_VERSION: '8.x'  # La versión de .NET
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    branches:
+      - main  # Esto ejecutará el flujo de trabajo cuando haya un push a la rama `main`
 
 permissions:
   contents: write
   packages: read
-  pages: write
-  security-events: write
 
 jobs:
   security:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      # Checkout del código
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Necesario para análisis completo
 
-      # Configuración .NET
-      - name: Setup .NET
+      # Análisis Semgrep (para código fuente)
+      - name: Set up Semgrep
+        run: docker pull semgrep/semgrep
+
+      - name: Run Semgrep
+        run: docker run --rm -v $(pwd):/src semgrep/semgrep semgrep scan --config="p/default" --json --output semgrep.json --metrics=off
+
+      - name: Install prospector-html
+        run: python -m pip install prospector2html
+
+      - name: Convert Semgrep results to HTML
+        run: prospector-html --input semgrep.json --output semgrep-report.html --filter semgrep || true
+
+      # Análisis Snyk (para dependencias)
+      - uses: snyk/actions/setup@master
+
+      - name: Set up .NET version
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore ${{ env.SOLUTION_PATH }}
-
-      # Análisis Semgrep (para código fuente)
-      - name: Run Semgrep Scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: auto  # Configuración general para detectar automáticamente las reglas
-          paths: DictApp/
-          exclude: "**/Migrations/**"
-          output_file: semgrep-results.json
-          sarif: false
-          verbose: true
-
-      - name: Convert Semgrep results
-        run: |
-          python -m pip install prospector2html
-          if [ -f "semgrep-results.json" ] && [ $(jq '.results | length' semgrep-results.json) -gt 0 ]; then
-            prospector-html --input semgrep-results.json --output semgrep-report.html --filter semgrep
-          else
-            echo '{"results": []}' > semgrep-report.html
-          fi
-
-      # Análisis Snyk (para dependencias)
-      - name: Setup Snyk
-        uses: snyk/actions/setup@master
-
       - name: Install snyk-to-html
         run: npm install -g snyk-to-html
 
-      # Analizar cada proyecto principal
-      - name: Snyk test - Application Layer
-        run: |
-          snyk test --file=DictApp/DataDictGen.Application/DataDictGen.Application.csproj --json > snyk-app.json || true
-          snyk-to-html -i snyk-app.json -o snyk-app-report.html
+      - name: Run Snyk test
+        run: snyk code test --json | snyk-to-html -o snyk-report.html
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Snyk test - Domain Layer
-        run: |
-          snyk test --file=DictApp/DataDictGen.Domain/DataDictGen.Domain.csproj --json > snyk-domain.json || true
-          snyk-to-html -i snyk-domain.json -o snyk-domain-report.html
-
-      - name: Snyk test - Infrastructure
-        run: |
-          snyk test --file=DictApp/DataDictGen.Infrastructure/DataDictGen.Infrastructure.csproj --json > snyk-infra.json || true
-          snyk-to-html -i snyk-infra.json -o snyk-infra-report.html
-
-      # Preparar reportes para GitHub Pages
-      - name: Generate index page
+      # Crear el dashboard (index.html)
+      - name: Generate Dashboard (index.html)
         run: |
           mkdir -p public/reports
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
-          <html>
+          <html lang="en">
           <head>
-              <title>Security Reports</title>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Security Reports Dashboard</title>
               <style>
-                  body { font-family: Arial, sans-serif; margin: 20px; }
-                  h1 { color: #0366d6; }
-                  .report { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; }
+                  body {
+                      font-family: Arial, sans-serif;
+                      margin: 40px;
+                      background-color: #f4f7fa;
+                  }
+                  h1 {
+                      color: #0366d6;
+                  }
+                  .report {
+                      background-color: #fff;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                      padding: 20px;
+                      margin: 10px 0;
+                  }
+                  .report h2 {
+                      color: #333;
+                  }
+                  .report a {
+                      text-decoration: none;
+                      color: #0366d6;
+                      font-weight: bold;
+                  }
+                  .report a:hover {
+                      text-decoration: underline;
+                  }
               </style>
           </head>
           <body>
-              <h1>Security Analysis Reports</h1>
+              <h1>Security Reports Dashboard</h1>
+
               <div class="report">
                   <h2>Semgrep Code Analysis</h2>
-                  <a href="reports/semgrep-report.html">View Report</a>
+                  <p>View the results of the Semgrep static code analysis.</p>
+                  <a href="reports/semgrep-report.html" target="_blank">View Semgrep Report</a>
               </div>
+
               <div class="report">
                   <h2>Snyk - Application Layer</h2>
-                  <a href="reports/snyk-app-report.html">View Report</a>
+                  <p>View the results of the Snyk security test for the application layer.</p>
+                  <a href="reports/snyk-report.html" target="_blank">View Snyk Report</a>
               </div>
-              <div class="report">
-                  <h2>Snyk - Domain Layer</h2>
-                  <a href="reports/snyk-domain-report.html">View Report</a>
-              </div>
-              <div class="report">
-                  <h2>Snyk - Infrastructure</h2>
-                  <a href="reports/snyk-infra-report.html">View Report</a>
-              </div>
+
           </body>
           </html>
           EOF
 
-      # Mover los reportes generados a la carpeta 'public/reports/'
-      - name: Move all reports
+      # Mover los reportes a la carpeta 'public/reports/'
+      - name: Move reports to public folder
         run: |
+          mkdir -p public/reports
           mv semgrep-report.html public/reports/
-          mv snyk-app-report.html public/reports/
-          mv snyk-domain-report.html public/reports/
-          mv snyk-infra-report.html public/reports/
+          mv snyk-report.html public/reports/
 
       # Verificar el contenido del directorio 'public' antes del despliegue
       - name: List files in public directory
         run: ls -R public
 
-      # Despliegue a GitHub Pages
+      # Desplegar en GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

@@ -30,11 +30,10 @@
 Desarrollar una aplicación capaz de conectarse a bases de datos relacionales para extraer automáticamente los metadatos y generar un diccionario de datos estructurado y exportable, facilitando la documentación técnica en proyectos de software.
 
 ## Objetivos Secundarios:
-1. Conectar la herramienta a la bases de datos
-2. Procesar y almacenar los metadatos en formatos estructurados
-3. Crear una interfaz que visualice el diccionario de datos.
-4. Permitir la exportación de resultados.
-5. Desplegar la aplicación para su uso por parte de desarrolladores y analistas.
+- Automatizar la extracción de metadatos de bases de datos.
+- Generar un diccionario de datos estructurado en un formato accesible.
+- Implementar una interfaz de usuario amigable para gestionar y actualizar los diccionarios de datos.
+- Facilitar la integración de la aplicación con sistemas de gestión de bases de datos.
 
 ---
 

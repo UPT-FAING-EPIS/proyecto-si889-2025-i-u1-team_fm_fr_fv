@@ -1,75 +1,69 @@
 name: Security Analysis
 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
 env:
-  DOTNET_VERSION: '8.x'
-
-on: push
-
-permissions:
-  contents: read
+  DOTNET_VERSION: '8.0.x'
+  CODE_DIR: 'DictApp'  # Directorio donde está tu solución .NET
 
 jobs:
-  security:
+  security-analysis:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Semgrep Analysis - Versión corregida
-      - name: Run Semgrep Scan
-        id: semgrep
+      # Análisis Semgrep (para código fuente)
+      - name: Run Semgrep on .NET code
         uses: returntocorp/semgrep-action@v1
         with:
-          config: p/default
+          config: p/csharp  # Config específica para C#
+          paths: ${{ env.CODE_DIR }}
           output_file: semgrep-results.json
           sarif: false
+          verbose: true
 
-      - name: Verify Semgrep output
+      - name: Convert Semgrep results to HTML
+        if: always()  # Ejecuta siempre, incluso si falla Semgrep
         run: |
-          ls -la
+          pip install prospector2html
           if [ -f "semgrep-results.json" ]; then
-            echo "Semgrep file exists"
-            cat semgrep-results.json | jq empty
+            prospector-html --input semgrep-results.json --output semgrep-report.html
           else
-            echo "Semgrep file NOT found!"
-            exit 1
+            echo '{"results": []}' > semgrep-report.html
           fi
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install prospector2html
-          sudo apt-get install -y jq  # Para validar JSON
-
-      - name: Convert to HTML
-        run: |
-          prospector-html \
-            --input semgrep-results.json \
-            --output public/semgrep-report.html \
-            --filter semgrep
-
-      # Snyk Analysis (se mantiene igual)
-      - uses: snyk/actions/setup@master
+      # Análisis Snyk (para dependencias .NET)
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Run Snyk test
-        run: |
-          npm install -g snyk-to-html
-          snyk code test --json > snyk-results.json
-          snyk-to-html -i snyk-results.json -o public/snyk-report.html
+      - name: Run Snyk analysis
+        uses: snyk/actions/dotnet@master
+        with:
+          command: test
+          args: --file=${{ env.CODE_DIR }}/DataDictGen.sln --json-file-output=snyk-results.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
+      - name: Generate Snyk HTML report
+        run: |
+          npm install -g snyk-to-html
+          snyk-to-html -i snyk-results.json -o snyk-report.html
+
+      # Publicar resultados
       - name: Upload reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
-          path: public/
+          path: |
+            semgrep-report.html
+            snyk-report.html

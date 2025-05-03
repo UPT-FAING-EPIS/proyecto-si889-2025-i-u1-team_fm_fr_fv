@@ -107,9 +107,6 @@ resource "azurerm_windows_web_app" "backend" {
     }
   }
 
-  # Configuración de implementación
-  # The 'deployment' block has been removed as it is not valid for this resource.
-
   # Opciones de identidad
   identity {
     type = "SystemAssigned"
@@ -117,18 +114,6 @@ resource "azurerm_windows_web_app" "backend" {
 }
 
 # Outputs
-output "database_server" {
-  value = azurerm_mssql_server.sqlsrv.fully_qualified_domain_name
-}
-
-output "database_name" {
-  value = azurerm_mssql_database.sqldb.name
-}
-
-output "backend_url" {
-  value = "https://${azurerm_windows_web_app.backend.default_hostname}"
-}
-
 output "resource_group_name" {
   value = azurerm_resource_group.rg.name
   description = "El nombre del grupo de recursos"
@@ -152,4 +137,9 @@ output "app_service_name" {
 output "backend_url" {
   value = "https://${azurerm_windows_web_app.backend.default_hostname}"
   description = "La URL del backend"
+}
+
+output "database_server" {
+  value = azurerm_mssql_server.sqlsrv.fully_qualified_domain_name
+  description = "El nombre de dominio completo del servidor de base de datos"
 }

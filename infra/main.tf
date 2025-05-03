@@ -37,7 +37,7 @@ resource "random_integer" "ri" {
 # Create the resource group
 resource "azurerm_resource_group" "rg" {
   name     = "upt-arg-${random_integer.ri.result}"
-  location = "eastus"
+  location = "westeurope"  # Cambiado de eastus a westeurope
 }
 
 resource "azurerm_mssql_server" "sqlsrv" {
@@ -127,4 +127,29 @@ output "database_name" {
 
 output "backend_url" {
   value = "https://${azurerm_windows_web_app.backend.default_hostname}"
+}
+
+output "resource_group_name" {
+  value = azurerm_resource_group.rg.name
+  description = "El nombre del grupo de recursos"
+}
+
+output "sql_server_name" {
+  value = azurerm_mssql_server.sqlsrv.name
+  description = "El nombre del servidor SQL"
+}
+
+output "sql_database_name" {
+  value = azurerm_mssql_database.sqldb.name
+  description = "El nombre de la base de datos SQL"
+}
+
+output "app_service_name" {
+  value = azurerm_windows_web_app.backend.name
+  description = "El nombre del App Service"
+}
+
+output "backend_url" {
+  value = "https://${azurerm_windows_web_app.backend.default_hostname}"
+  description = "La URL del backend"
 }

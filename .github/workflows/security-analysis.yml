@@ -112,10 +112,17 @@ jobs:
           </html>
           EOF
 
+      # Mover los reportes generados a la carpeta 'public/reports/'
       - name: Move all reports
         run: |
           mv semgrep-report.html public/reports/
-          mv *-report.html public/reports/
+          mv snyk-app-report.html public/reports/
+          mv snyk-domain-report.html public/reports/
+          mv snyk-infra-report.html public/reports/
+
+      # Verificar el contenido del directorio 'public' antes del despliegue
+      - name: List files in public directory
+        run: ls -R public
 
       # Despliegue
       - name: Deploy to GitHub Pages

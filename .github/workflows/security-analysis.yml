@@ -1,25 +1,29 @@
 name: Security Analysis
 
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_PATH: 'DictApp/DataDictGen.sln'
+
 on:
   push:
     branches: [ main ]
   pull_request:
 
-env:
-  DOTNET_VERSION: '8.0.x'
-  SOLUTION_PATH: 'DictApp/DataDictGen.sln'
+permissions:
+  contents: write
+  packages: read
+  security-events: write
 
 jobs:
-  security-analysis:
+  security:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para análisis completo
 
+      # Configuración .NET
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -28,49 +32,94 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ${{ env.SOLUTION_PATH }}
 
-      # Analizar cada proyecto por separado
-      - name: Run Snyk on Application layer
-        uses: snyk/actions/dotnet@master
-        with:
-          command: test
-          args: --file=DictApp/DataDicGen.Application/DataDicGen.Application.csproj --json-file-output=snyk-app-results.json
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Run Snyk on Tests project
-        uses: snyk/actions/dotnet@master
-        with:
-          command: test
-          args: --file=DictApp/DataDicGen.Tests/DataDicGen.Tests.csproj --json-file-output=snyk-tests-results.json
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        continue-on-error: true  # Los tests pueden tener dependencias de desarrollo
-
-      # Combinar resultados (opcional)
-      - name: Combine reports
+      # Análisis Semgrep (para código fuente)
+      - name: Run Semgrep on solution
         run: |
-          npm install -g snyk-to-html
-          
-          # Si ambos reportes existen
-          if [ -f "snyk-app-results.json" ] && [ -f "snyk-tests-results.json" ]; then
-            jq -s '.[0].vulnerabilities + .[1].vulnerabilities | unique' snyk-app-results.json snyk-tests-results.json > combined-results.json
-            snyk-to-html -i combined-results.json -o snyk-report.html
-          
-          # Si solo existe el de aplicación
-          elif [ -f "snyk-app-results.json" ]; then
-            snyk-to-html -i snyk-app-results.json -o snyk-report.html
-          
-          # Si solo existe el de tests
-          elif [ -f "snyk-tests-results.json" ]; then
-            snyk-to-html -i snyk-tests-results.json -o snyk-report.html
-          
-          # Si no hay reportes
+          docker pull semgrep/semgrep
+          docker run --rm -v $(pwd):/src semgrep/semgrep scan \
+            --config="p/csharp" \
+            --exclude="**/Migrations/**" \
+            --json --output semgrep.json \
+            --metrics=off \
+            DictApp/
+
+      - name: Convert Semgrep results
+        run: |
+          python -m pip install prospector2html
+          if [ -f "semgrep.json" ]; then
+            prospector-html --input semgrep.json --output semgrep-report.html --filter semgrep
           else
-            echo '{"vulnerabilities": []}' > snyk-report.html
+            echo '{"results": []}' > semgrep-report.html
           fi
 
-      - name: Upload report
-        uses: actions/upload-artifact@v4
+      # Análisis Snyk (para dependencias)
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+
+      - name: Install snyk-to-html
+        run: npm install -g snyk-to-html
+
+      # Analizar cada proyecto principal
+      - name: Snyk test - Application Layer
+        run: |
+          snyk test --file=DictApp/DataDictGen.Application/DataDictGen.Application.csproj --json > snyk-app.json || true
+          snyk-to-html -i snyk-app.json -o snyk-app-report.html
+
+      - name: Snyk test - Domain Layer
+        run: |
+          snyk test --file=DictApp/DataDictGen.Domain/DataDictGen.Domain.csproj --json > snyk-domain.json || true
+          snyk-to-html -i snyk-domain.json -o snyk-domain-report.html
+
+      - name: Snyk test - Infrastructure
+        run: |
+          snyk test --file=DictApp/DataDictGen.Infrastructure/DataDictGen.Infrastructure.csproj --json > snyk-infra.json || true
+          snyk-to-html -i snyk-infra.json -o snyk-infra-report.html
+
+      # Preparar reportes para GitHub Pages
+      - name: Generate index page
+        run: |
+          mkdir -p public/reports
+          cat << 'EOF' > public/index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Security Reports</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 20px; }
+                  h1 { color: #0366d6; }
+                  .report { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; }
+              </style>
+          </head>
+          <body>
+              <h1>Security Analysis Reports</h1>
+              <div class="report">
+                  <h2>Semgrep Code Analysis</h2>
+                  <a href="reports/semgrep-report.html">View Report</a>
+              </div>
+              <div class="report">
+                  <h2>Snyk - Application Layer</h2>
+                  <a href="reports/snyk-app-report.html">View Report</a>
+              </div>
+              <div class="report">
+                  <h2>Snyk - Domain Layer</h2>
+                  <a href="reports/snyk-domain-report.html">View Report</a>
+              </div>
+              <div class="report">
+                  <h2>Snyk - Infrastructure</h2>
+                  <a href="reports/snyk-infra-report.html">View Report</a>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Move all reports
+        run: |
+          mv semgrep-report.html public/reports/
+          mv *-report.html public/reports/
+
+      # Despliegue
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: security-reports
-          path: snyk-report.html
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: public

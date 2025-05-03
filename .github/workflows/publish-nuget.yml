@@ -1,0 +1,49 @@
+name: Publicar NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'  # Se ejecuta cuando se crea un tag con formato v1.0.0, etc.
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  GITHUB_PACKAGES_URL: 'https://nuget.pkg.github.com/marant7/index.json'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Extraer versión del tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Restaurar dependencias
+        run: dotnet restore DictApp/DataDictGen.sln
+
+      - name: Construir proyectos
+        run: dotnet build DictApp/DataDictGen.sln --configuration Release --no-restore
+
+      - name: Empaquetar NuGet
+        run: |
+          mkdir -p ./nupkgs
+          dotnet pack DictApp/DataDicGen.Domain/DataDicGen.Domain.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+          dotnet pack DictApp/DataDicGen.Application/DataDicGen.Application.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+          dotnet pack DictApp/DataDicGen.Infrastructure/DataDicGen.Infrastructure.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+          dotnet pack DictApp/DataDicGen.WebAPI/DataDicGen.WebAPI.csproj --configuration Release --no-build --output ./nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+
+      - name: Publicar en GitHub Packages
+        run: |
+          dotnet nuget add source ${{ env.GITHUB_PACKAGES_URL }} --name github --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }}
+          dotnet nuget push "./nupkgs/*.nupkg" --source github --api-key ${{ secrets.G_TOKEN }}

@@ -45,36 +45,289 @@ jobs:
       - name: Create reports directory
         run: mkdir -p public/reports
 
-      # Análisis Semgrep simplificado para evitar errores
-      - name: Set up Semgrep
+      # Análisis Semgrep mejorado para generar reportes válidos
+      - name: Set up Python and Semgrep
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Semgrep and dependencies
         run: |
+          python -m pip install --upgrade pip
           python -m pip install semgrep
+          python -m pip install tabulate
           semgrep --version
 
-      - name: Run Semgrep on C# code
-        continue-on-error: true  # Evitar que falle todo el workflow
+      - name: Run Semgrep Analysis
+        continue-on-error: true
         run: |
-          semgrep scan --config=p/csharp \
+          echo "Running Semgrep analysis on C# code..."
+          # Ejecutar Semgrep y generar un reporte JSON
+          semgrep scan \
+            --config=p/csharp \
             --include="DictApp/**.cs" \
             --exclude="**/bin/**" \
             --exclude="**/obj/**" \
             --exclude="**/DataDicGen.Frontend/**" \
-            --json --output=semgrep.json --metrics=off
+            --json > semgrep-output.json
 
-      - name: Install report conversion tools
+      # Crear un reporte HTML completamente controlado
+      - name: Generate custom Semgrep HTML report
         run: |
-          python -m pip install prospector2html || pip install prospector2html
-          npm install -g snyk-to-html
+          cat << 'EOF' > public/reports/semgrep-report.html
+          <!DOCTYPE html>
+          <html lang="es">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Reporte de Análisis de Seguridad - Semgrep</title>
+              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+              <style>
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      padding-top: 2rem;
+                      padding-bottom: 2rem;
+                      background-color: #f8f9fa;
+                  }
+                  .header {
+                      background-color: #007bff;
+                      color: white;
+                      padding: 2rem;
+                      border-radius: 0.5rem;
+                      margin-bottom: 2rem;
+                  }
+                  .summary-card {
+                      border-left: 5px solid;
+                      margin-bottom: 1rem;
+                  }
+                  .severity-high {
+                      border-color: #dc3545;
+                  }
+                  .severity-medium {
+                      border-color: #fd7e14;
+                  }
+                  .severity-low {
+                      border-color: #ffc107;
+                  }
+                  .severity-info {
+                      border-color: #0dcaf0;
+                  }
+                  .issue-card {
+                      margin-bottom: 1.5rem;
+                      box-shadow: 0 4px 6px rgba(0,0,0,.1);
+                  }
+                  .code-block {
+                      background-color: #f8f9fa;
+                      padding: 1rem;
+                      border-radius: 0.25rem;
+                      font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                      font-size: 0.875rem;
+                      overflow-x: auto;
+                      white-space: pre-wrap;
+                  }
+                  .file-path {
+                      font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                      font-size: 0.875rem;
+                      color: #6c757d;
+                  }
+                  .badge-high {
+                      background-color: #dc3545;
+                      color: white;
+                  }
+                  .badge-medium {
+                      background-color: #fd7e14;
+                      color: white;
+                  }
+                  .badge-low {
+                      background-color: #ffc107;
+                      color: black;
+                  }
+                  .badge-info {
+                      background-color: #0dcaf0;
+                      color: black;
+                  }
+                  .no-issues {
+                      background-color: #d1e7dd;
+                      color: #0f5132;
+                      padding: 2rem;
+                      border-radius: 0.5rem;
+                      text-align: center;
+                      margin-top: 2rem;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header text-center">
+                      <h1>Reporte de Análisis de Seguridad con Semgrep</h1>
+                      <p class="lead">Proyecto: DataDicGen</p>
+                      <p class="mb-0">Fecha: $(date)</p>
+                  </div>
+                  
+                  <div class="row mb-4">
+                      <div class="col-md-3">
+                          <div class="card summary-card severity-high">
+                              <div class="card-body text-center">
+                                  <h5 class="card-title">Alto Riesgo</h5>
+                                  <h2 class="card-text" id="high-count">0</h2>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="col-md-3">
+                          <div class="card summary-card severity-medium">
+                              <div class="card-body text-center">
+                                  <h5 class="card-title">Riesgo Medio</h5>
+                                  <h2 class="card-text" id="medium-count">0</h2>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="col-md-3">
+                          <div class="card summary-card severity-low">
+                              <div class="card-body text-center">
+                                  <h5 class="card-title">Riesgo Bajo</h5>
+                                  <h2 class="card-text" id="low-count">0</h2>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="col-md-3">
+                          <div class="card summary-card severity-info">
+                              <div class="card-body text-center">
+                                  <h5 class="card-title">Información</h5>
+                                  <h2 class="card-text" id="info-count">0</h2>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <h2 class="mb-4">Resultados del Análisis</h2>
+                  
+                  <div id="issues-container">
+                      <!-- Los problemas encontrados se insertarán aquí -->
+                  </div>
+                  
+                  <div class="no-issues" id="no-issues-message">
+                      <h3>¡No se detectaron problemas de seguridad!</h3>
+                      <p class="mb-0">Tu código ha pasado el análisis de seguridad de Semgrep sin detectar vulnerabilidades. Sin embargo, esto no garantiza que el código esté completamente libre de problemas de seguridad.</p>
+                  </div>
+                  
+                  <div class="mt-5 mb-3 text-center">
+                      <p class="text-muted">Este reporte fue generado automáticamente como parte del pipeline de CI/CD.</p>
+                      <p class="text-muted">UPT - 2025 - Grupo FM FR FV</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+          
+          # Procesar resultados de Semgrep si existen
+          if [ -s semgrep-output.json ]; then
+            python3 - <<END
+import json
+import html
+import os
 
-      - name: Create basic Semgrep report
-        run: |
-          if [ -s semgrep.json ]; then
-            prospector-html --input semgrep.json --output public/reports/semgrep-report.html --filter semgrep || echo "Conversion completed with warnings"
+try:
+    # Cargar el reporte HTML generado
+    with open('public/reports/semgrep-report.html', 'r') as f:
+        html_content = f.read()
+    
+    # Cargar los resultados de Semgrep
+    with open('semgrep-output.json', 'r') as f:
+        data = json.load(f)
+    
+    # Verificar si hay resultados
+    if 'results' in data and len(data['results']) > 0:
+        results = data['results']
+        
+        # Contadores por severidad
+        high = 0
+        medium = 0
+        low = 0
+        info = 0
+        
+        # Generar HTML para cada hallazgo
+        issues_html = ""
+        
+        for i, result in enumerate(results):
+            path = result.get('path', '')
+            message = result.get('extra', {}).get('message', '')
+            if not message:
+                message = result.get('check_id', 'Issue detected')
+                
+            severity = result.get('extra', {}).get('severity', '')
+            
+            # Determinar la severidad
+            severity_class = ''
+            severity_badge = ''
+            
+            if severity == 'ERROR':
+                severity_class = 'border-danger'
+                severity_badge = '<span class="badge badge-high">Alto</span>'
+                high += 1
+            elif severity == 'WARNING':
+                severity_class = 'border-warning'
+                severity_badge = '<span class="badge badge-medium">Medio</span>'
+                medium += 1
+            elif severity == 'INFO':
+                severity_class = 'border-info'
+                severity_badge = '<span class="badge badge-low">Bajo</span>'
+                low += 1
+            else:
+                severity_class = 'border-secondary'
+                severity_badge = '<span class="badge badge-info">Info</span>'
+                info += 1
+            
+            # Obtener líneas de código
+            start_line = result.get('start', {}).get('line', 0)
+            end_line = result.get('end', {}).get('line', 0)
+            lines = result.get('extra', {}).get('lines', '')
+            
+            # Crear tarjeta HTML para el problema
+            issue_html = f'''
+            <div class="card issue-card {severity_class}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Problema #{i+1}: {html.escape(message)}</h5>
+                    {severity_badge}
+                </div>
+                <div class="card-body">
+                    <p class="file-path">Archivo: {html.escape(path)}</p>
+                    <p>Líneas: {start_line}-{end_line}</p>
+                    <div class="code-block">{html.escape(lines)}</div>
+                    <p class="mt-3 mb-0 text-muted">ID de regla: {result.get('check_id', 'N/A')}</p>
+                </div>
+            </div>
+            '''
+            issues_html += issue_html
+        
+        # Actualizar contadores en el HTML
+        html_content = html_content.replace('<h2 class="card-text" id="high-count">0</h2>', f'<h2 class="card-text" id="high-count">{high}</h2>')
+        html_content = html_content.replace('<h2 class="card-text" id="medium-count">0</h2>', f'<h2 class="card-text" id="medium-count">{medium}</h2>')
+        html_content = html_content.replace('<h2 class="card-text" id="low-count">0</h2>', f'<h2 class="card-text" id="low-count">{low}</h2>')
+        html_content = html_content.replace('<h2 class="card-text" id="info-count">0</h2>', f'<h2 class="card-text" id="info-count">{info}</h2>')
+        
+        # Insertar los problemas encontrados
+        html_content = html_content.replace('<!-- Los problemas encontrados se insertarán aquí -->', issues_html)
+        
+        # Ocultar el mensaje de "no issues" si hay problemas
+        if high + medium + low + info > 0:
+            html_content = html_content.replace('class="no-issues" id="no-issues-message"', 'class="no-issues" id="no-issues-message" style="display:none;"')
+        
+        # Guardar el HTML actualizado
+        with open('public/reports/semgrep-report.html', 'w') as f:
+            f.write(html_content)
+        
+        print(f"Reporte de Semgrep actualizado con {len(results)} problemas encontrados.")
+    else:
+        print("No se encontraron problemas en el análisis de Semgrep.")
+        
+except Exception as e:
+    print(f"Error procesando resultados de Semgrep: {e}")
+END
           else
-            echo "<html><body><h1>No Semgrep findings</h1><p>No security issues were found by Semgrep.</p></body></html>" > public/reports/semgrep-report.html
+            echo "No se encontraron resultados de Semgrep o el archivo está vacío."
           fi
 
-      # Simplificar el análisis Snyk para mayor compatibilidad
+      # Análisis Snyk simplificado para mayor compatibilidad
       - name: Setup Snyk
         uses: snyk/actions/setup@master
         continue-on-error: true
@@ -84,93 +337,180 @@ jobs:
         continue-on-error: true
         run: snyk --version
         
-      - name: Create basic Snyk report
+      # Crear un reporte HTML completamente controlado para Snyk
+      - name: Generate custom Snyk HTML report
         run: |
-          echo "<html><body><h1>Snyk Security Report</h1><p>This is a placeholder for Snyk security analysis.</p><p>Configure Snyk token to enable detailed vulnerability scanning.</p></body></html>" > public/reports/snyk-report.html
+          cat << 'EOF' > public/reports/snyk-report.html
+          <!DOCTYPE html>
+          <html lang="es">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Reporte de Análisis de Dependencias - Snyk</title>
+              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+              <style>
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      padding-top: 2rem;
+                      padding-bottom: 2rem;
+                      background-color: #f8f9fa;
+                  }
+                  .header {
+                      background-color: #6f42c1;
+                      color: white;
+                      padding: 2rem;
+                      border-radius: 0.5rem;
+                      margin-bottom: 2rem;
+                  }
+                  .placeholder-message {
+                      background-color: #e2e3e5;
+                      padding: 2rem;
+                      border-radius: 0.5rem;
+                      text-align: center;
+                      margin-top: 2rem;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header text-center">
+                      <h1>Reporte de Análisis de Dependencias con Snyk</h1>
+                      <p class="lead">Proyecto: DataDicGen</p>
+                      <p class="mb-0">Fecha: $(date)</p>
+                  </div>
+                  
+                  <div class="placeholder-message">
+                      <h3>Análisis de Dependencias</h3>
+                      <p>Para habilitar el análisis completo de dependencias, configura el token de Snyk en los secretos del repositorio.</p>
+                      <p>El análisis de dependencias ayuda a identificar vulnerabilidades conocidas en las bibliotecas que utiliza tu proyecto.</p>
+                      <p class="mb-0">Para más información, visita <a href="https://snyk.io" target="_blank">snyk.io</a></p>
+                  </div>
+                  
+                  <div class="mt-5 mb-3 text-center">
+                      <p class="text-muted">Este reporte fue generado automáticamente como parte del pipeline de CI/CD.</p>
+                      <p class="text-muted">UPT - 2025 - Grupo FM FR FV</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
 
       # Crear el dashboard (index.html)
       - name: Generate Dashboard (index.html)
         run: |
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
-          <html lang="en">
+          <html lang="es">
           <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Security Reports Dashboard - DictApp</title>
+              <title>Dashboard de Seguridad - DataDicGen</title>
+              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
               <style>
                   body {
-                      font-family: Arial, sans-serif;
-                      margin: 40px;
-                      background-color: #f4f7fa;
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      padding-top: 2rem;
+                      padding-bottom: 2rem;
+                      background-color: #f8f9fa;
                   }
-                  h1 {
-                      color: #0366d6;
-                  }
-                  .report {
-                      background-color: #fff;
-                      border-radius: 8px;
-                      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                      padding: 20px;
-                      margin: 20px 0;
-                  }
-                  .report h2 {
-                      color: #333;
-                      border-bottom: 1px solid #eee;
-                      padding-bottom: 10px;
-                  }
-                  .report a {
-                      display: inline-block;
-                      text-decoration: none;
+                  .header {
+                      background: linear-gradient(135deg, #007bff, #6610f2);
                       color: white;
-                      background-color: #0366d6;
-                      padding: 10px 15px;
-                      border-radius: 4px;
-                      margin-top: 10px;
-                      font-weight: bold;
+                      padding: 3rem;
+                      border-radius: 0.5rem;
+                      margin-bottom: 2rem;
+                      text-align: center;
                   }
-                  .report a:hover {
-                      background-color: #0056b3;
+                  .report-card {
+                      transition: transform 0.3s;
+                      height: 100%;
+                  }
+                  .report-card:hover {
+                      transform: translateY(-5px);
+                  }
+                  .card-icon {
+                      font-size: 3rem;
+                      margin-bottom: 1rem;
                   }
                   .timestamp {
-                      color: #666;
-                      font-style: italic;
-                      margin-top: 20px;
-                  }
-                  .project-info {
-                      background-color: #e1f5fe;
-                      padding: 15px;
-                      border-radius: 8px;
-                      margin-bottom: 20px;
+                      background-color: #e9ecef;
+                      padding: 1rem;
+                      border-radius: 0.5rem;
+                      margin-top: 2rem;
                   }
               </style>
           </head>
           <body>
-              <h1>Security Reports Dashboard - DictApp</h1>
-              
-              <div class="project-info">
-                  <h2>Project Information</h2>
-                  <p><strong>Repository:</strong> proyecto-si889-2025-i-u1-team_fm_fr_fv</p>
-                  <p><strong>Analysis Date:</strong> $(date)</p>
-                  <p><strong>Components Analyzed:</strong> DataDicGen.Application, DataDicGen.Domain, DataDicGen.Infrastructure, DataDicGen.WebAPI</p>
-              </div>
-              
-              <div class="report">
-                  <h2>Semgrep Code Analysis</h2>
-                  <p>Results of static code analysis performed by Semgrep on C# code.</p>
-                  <p>This analysis helps identify potential security issues, bugs, and code quality problems in your C# source code.</p>
-                  <a href="reports/semgrep-report.html" target="_blank">View Semgrep Report</a>
-              </div>
-              
-              <div class="report">
-                  <h2>Snyk Dependency Analysis</h2>
-                  <p>Results of dependency scanning performed by Snyk on your .NET projects.</p>
-                  <p>This analysis identifies known vulnerabilities in your project dependencies that could pose security risks.</p>
-                  <a href="reports/snyk-report.html" target="_blank">View Snyk Report</a>
-              </div>
-              
-              <div class="timestamp">
-                  Last updated: $(date)
+              <div class="container">
+                  <div class="header">
+                      <h1 class="display-4">Dashboard de Seguridad</h1>
+                      <p class="lead mb-0">Proyecto DataDicGen - Análisis de Seguridad Automatizado</p>
+                  </div>
+                  
+                  <div class="row mb-4">
+                      <div class="col-md-6 mb-4">
+                          <div class="card report-card shadow">
+                              <div class="card-body text-center">
+                                  <div class="card-icon text-primary">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" viewBox="0 0 16 16">
+                                          <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+                                      </svg>
+                                  </div>
+                                  <h4 class="card-title">Análisis Estático de Código</h4>
+                                  <p class="card-text">Revisión del código C# en busca de vulnerabilidades y problemas de seguridad utilizando Semgrep.</p>
+                                  <a href="reports/semgrep-report.html" class="btn btn-primary mt-3">Ver Reporte</a>
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <div class="col-md-6 mb-4">
+                          <div class="card report-card shadow">
+                              <div class="card-body text-center">
+                                  <div class="card-icon text-purple" style="color: #6f42c1;">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="currentColor" viewBox="0 0 16 16">
+                                          <path fill-rule="evenodd" d="M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 9.99a11.777 11.777 0 0 0 2.517 2.453c.386.273.744.482 1.048.625.28.132.581.24.829.24s.548-.108.829-.24a7.159 7.159 0 0 0 1.048-.625 11.775 11.775 0 0 0 2.517-2.453c1.678-2.195 3.061-5.513 2.465-9.99a1.541 1.541 0 0 0-1.044-1.263 62.467 62.467 0 0 0-2.887-.87C9.843.266 8.69 0 8 0zm0 5a1.5 1.5 0 0 1 .5 2.915l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99A1.5 1.5 0 0 1 8 5z"/>
+                                      </svg>
+                                  </div>
+                                  <h4 class="card-title">Análisis de Dependencias</h4>
+                                  <p class="card-text">Escaneo de las dependencias del proyecto para identificar vulnerabilidades conocidas utilizando Snyk.</p>
+                                  <a href="reports/snyk-report.html" class="btn btn-secondary mt-3">Ver Reporte</a>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div class="row mb-4">
+                      <div class="col-12">
+                          <div class="card shadow">
+                              <div class="card-header bg-light">
+                                  <h4 class="mb-0">Información del Proyecto</h4>
+                              </div>
+                              <div class="card-body">
+                                  <div class="row">
+                                      <div class="col-md-6">
+                                          <p><strong>Repositorio:</strong> proyecto-si889-2025-i-u1-team_fm_fr_fv</p>
+                                          <p><strong>Organización:</strong> UPT-FAING-EPIS</p>
+                                          <p><strong>Fecha de Análisis:</strong> $(date)</p>
+                                      </div>
+                                      <div class="col-md-6">
+                                          <p><strong>Componentes Analizados:</strong></p>
+                                          <ul>
+                                              <li>DataDicGen.Application</li>
+                                              <li>DataDicGen.Domain</li>
+                                              <li>DataDicGen.Infrastructure</li>
+                                              <li>DataDicGen.WebAPI</li>
+                                          </ul>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div class="timestamp text-center">
+                      <p class="text-muted mb-0">Última actualización: $(date)</p>
+                      <p class="text-muted mb-0">UPT - 2025 - Grupo FM FR FV</p>
+                  </div>
               </div>
           </body>
           </html>
@@ -192,7 +532,7 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.G_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: public
           destination_dir: security-reports
           full_commit_message: 'Update security reports [skip ci]'

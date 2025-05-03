@@ -1,16 +1,25 @@
 name: Security Analysis
 
 env:
-  DOTNET_VERSION: '8.x'  # La versión de .NET
+  DOTNET_VERSION: '8.0.x'  # Versión específica de .NET para mayor compatibilidad
 
 on:
   push:
     branches:
-      - main  # Esto ejecutará el flujo de trabajo cuando haya un push a la rama `main`
+      - main
+    paths:
+      - 'DictApp/**'
+      - '!DictApp/DataDicGen.Frontend/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'DictApp/**'
+      - '!DictApp/DataDicGen.Frontend/**'
 
 permissions:
   contents: write
-  packages: read
+  security-events: write
 
 jobs:
   security:
@@ -23,46 +32,101 @@ jobs:
         with:
           fetch-depth: 0  # Necesario para análisis completo
 
-      # Análisis Semgrep (para código fuente)
-      - name: Set up Semgrep
-        run: docker pull semgrep/semgrep
-
-      - name: Run Semgrep
-        run: docker run --rm -v $(pwd):/src semgrep/semgrep semgrep scan --config="p/default" --json --output semgrep.json --metrics=off
-
-      - name: Install prospector-html
-        run: python -m pip install prospector2html
-
-      - name: Convert Semgrep results to HTML
-        run: prospector-html --input semgrep.json --output semgrep-report.html --filter semgrep || true
-
-      # Análisis Snyk (para dependencias)
-      - uses: snyk/actions/setup@master
-
-      - name: Set up .NET version
+      # Configurar .NET
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+          
+      # Restaurar dependencias para evitar errores en pruebas posteriores
+      - name: Restore dependencies
+        run: dotnet restore DictApp/DataDictGen.sln
 
-      - name: Install snyk-to-html
-        run: npm install -g snyk-to-html
+      # Crear carpeta para reportes
+      - name: Create reports directory
+        run: mkdir -p public/reports
 
-      - name: Run Snyk test
-        run: snyk code test --json | snyk-to-html -o snyk-report.html
+      # Análisis Semgrep (para código fuente) enfocado en C#
+      - name: Set up Semgrep
+        run: |
+          python -m pip install semgrep
+          semgrep --version
+
+      - name: Run Semgrep on C# code
+        run: |
+          semgrep scan --config=p/csharp \
+            --include="DictApp/DataDicGen.*/**.cs" \
+            --exclude="DictApp/DataDicGen.Frontend/**" \
+            --exclude="**/bin/**" \
+            --exclude="**/obj/**" \
+            --json --output=semgrep.json --metrics=off
+
+      - name: Install report conversion tools
+        run: |
+          python -m pip install prospector2html
+          npm install -g snyk-to-html
+
+      - name: Convert Semgrep results to HTML
+        run: |
+          if [ -s semgrep.json ]; then
+            prospector-html --input semgrep.json --output public/reports/semgrep-report.html --filter semgrep || echo "Conversion completed with warnings"
+          else
+            echo "<html><body><h1>No Semgrep findings</h1><p>No security issues were found by Semgrep.</p></body></html>" > public/reports/semgrep-report.html
+          fi
+
+      # Análisis Snyk para dependencias .NET
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk on .NET projects
+        id: snyk
+        continue-on-error: true
+        run: |
+          mkdir -p snyk-output
+          
+          for PROJECT in DictApp/DataDicGen.Application DictApp/DataDicGen.Domain DictApp/DataDicGen.Infrastructure DictApp/DataDicGen.WebAPI; do
+            if [ -d "$PROJECT" ]; then
+              echo "Scanning $PROJECT"
+              snyk test --json --file=$PROJECT/*.csproj --packages-folder=DictApp/packages > snyk-output/$(basename $PROJECT).json || true
+            fi
+          done
+
+      - name: Combine Snyk reports
+        run: |
+          echo "[" > snyk-combined.json
+          
+          FIRST=true
+          for FILE in snyk-output/*.json; do
+            if [ -s "$FILE" ]; then
+              if [ "$FIRST" = true ]; then
+                FIRST=false
+              else
+                echo "," >> snyk-combined.json
+              fi
+              cat "$FILE" | sed '1s/^.//' | sed '$s/.$//' >> snyk-combined.json
+            fi
+          done
+          
+          echo "]" >> snyk-combined.json
+          
+          if [ -s snyk-combined.json ] && [ "$(cat snyk-combined.json)" != "[]" ]; then
+            snyk-to-html -i snyk-combined.json -o public/reports/snyk-report.html || echo "No valid Snyk data to convert"
+          else
+            echo "<html><body><h1>No Snyk findings</h1><p>No security issues were found by Snyk.</p></body></html>" > public/reports/snyk-report.html
+          fi
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       # Crear el dashboard (index.html)
       - name: Generate Dashboard (index.html)
         run: |
-          mkdir -p public/reports
           cat << 'EOF' > public/index.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Security Reports Dashboard</title>
+              <title>Security Reports Dashboard - DictApp</title>
               <style>
                   body {
                       font-family: Arial, sans-serif;
@@ -77,50 +141,81 @@ jobs:
                       border-radius: 8px;
                       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                       padding: 20px;
-                      margin: 10px 0;
+                      margin: 20px 0;
                   }
                   .report h2 {
                       color: #333;
+                      border-bottom: 1px solid #eee;
+                      padding-bottom: 10px;
                   }
                   .report a {
+                      display: inline-block;
                       text-decoration: none;
-                      color: #0366d6;
+                      color: white;
+                      background-color: #0366d6;
+                      padding: 10px 15px;
+                      border-radius: 4px;
+                      margin-top: 10px;
                       font-weight: bold;
                   }
                   .report a:hover {
-                      text-decoration: underline;
+                      background-color: #0056b3;
+                  }
+                  .timestamp {
+                      color: #666;
+                      font-style: italic;
+                      margin-top: 20px;
+                  }
+                  .project-info {
+                      background-color: #e1f5fe;
+                      padding: 15px;
+                      border-radius: 8px;
+                      margin-bottom: 20px;
                   }
               </style>
           </head>
           <body>
-              <h1>Security Reports Dashboard</h1>
-
+              <h1>Security Reports Dashboard - DictApp</h1>
+              
+              <div class="project-info">
+                  <h2>Project Information</h2>
+                  <p><strong>Repository:</strong> proyecto-si889-2025-i-u1-team_fm_fr_fv</p>
+                  <p><strong>Analysis Date:</strong> $(date)</p>
+                  <p><strong>Components Analyzed:</strong> DataDicGen.Application, DataDicGen.Domain, DataDicGen.Infrastructure, DataDicGen.WebAPI</p>
+              </div>
+              
               <div class="report">
                   <h2>Semgrep Code Analysis</h2>
-                  <p>View the results of the Semgrep static code analysis.</p>
+                  <p>Results of static code analysis performed by Semgrep on C# code.</p>
+                  <p>This analysis helps identify potential security issues, bugs, and code quality problems in your C# source code.</p>
                   <a href="reports/semgrep-report.html" target="_blank">View Semgrep Report</a>
               </div>
-
+              
               <div class="report">
-                  <h2>Snyk - Application Layer</h2>
-                  <p>View the results of the Snyk security test for the application layer.</p>
+                  <h2>Snyk Dependency Analysis</h2>
+                  <p>Results of dependency scanning performed by Snyk on your .NET projects.</p>
+                  <p>This analysis identifies known vulnerabilities in your project dependencies that could pose security risks.</p>
                   <a href="reports/snyk-report.html" target="_blank">View Snyk Report</a>
               </div>
-
+              
+              <div class="timestamp">
+                  Last updated: $(date)
+              </div>
           </body>
           </html>
           EOF
 
-      # Mover los reportes a la carpeta 'public/reports/'
-      - name: Move reports to public folder
-        run: |
-          mkdir -p public/reports
-          mv semgrep-report.html public/reports/
-          mv snyk-report.html public/reports/
-
       # Verificar el contenido del directorio 'public' antes del despliegue
       - name: List files in public directory
         run: ls -R public
+
+      # Subir artefactos para referencia
+      - name: Upload reports as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: public/
+          retention-days: 7
 
       # Desplegar en GitHub Pages
       - name: Deploy to GitHub Pages
@@ -128,3 +223,5 @@ jobs:
         with:
           github_token: ${{ secrets.G_TOKEN }}
           publish_dir: public
+          destination_dir: security-reports
+          full_commit_message: 'Update security reports [skip ci]'

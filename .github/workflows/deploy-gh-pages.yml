@@ -1,0 +1,41 @@
+name: Deploy to GitHub Pages
+on:
+  workflow_run:
+    workflows: ["Security Analysis"]
+    types: [completed]
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Reports
+        uses: actions/download-artifact@v4
+        with:
+          name: security-reports
+          path: public/reports/
+
+      - name: Generate Index
+        run: |
+          mkdir -p public
+          cat << 'EOF' > public/index.html
+          <!DOCTYPE html>
+          <html>
+          <head><title>Security Reports</title></head>
+          <body>
+            <h1>Reports</h1>
+            <ul>
+              <li><a href="reports/snyk-report.html">Snyk Report</a></li>
+              <li><a href="reports/semgrep-report.html">Semgrep Report</a></li>
+            </ul>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: public

@@ -31,6 +31,11 @@
     <RepositoryUrl>https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    
+    <!-- Propiedades de versión -->
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
 
 </Project>

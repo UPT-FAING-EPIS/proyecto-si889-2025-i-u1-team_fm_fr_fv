@@ -17,6 +17,11 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <IsPackable>true</IsPackable>
+    
+    <!-- Propiedades de versión -->
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

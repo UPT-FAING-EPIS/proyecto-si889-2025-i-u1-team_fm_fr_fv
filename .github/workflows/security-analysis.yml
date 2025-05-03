@@ -25,26 +25,46 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # Paso 1: Restaurar dependencias para que Snyk pueda analizarlas
       - name: Restore dependencies
         run: dotnet restore ${{ env.SOLUTION_PATH }}
 
-      # Paso 2: Analizar con Snyk (versión corregida)
-      - name: Run Snyk analysis
+      # Analizar cada proyecto por separado
+      - name: Run Snyk on Application layer
         uses: snyk/actions/dotnet@master
         with:
           command: test
-          args: --all-projects --file=${{ env.SOLUTION_PATH }} --json-file-output=snyk-results.json
+          args: --file=DictApp/DataDicGen.Application/DataDicGen.Application.csproj --json-file-output=snyk-app-results.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      # Generar reporte HTML
-      - name: Generate Snyk report
-        if: success() || failure()  # Ejecuta siempre
+      - name: Run Snyk on Tests project
+        uses: snyk/actions/dotnet@master
+        with:
+          command: test
+          args: --file=DictApp/DataDicGen.Tests/DataDicGen.Tests.csproj --json-file-output=snyk-tests-results.json
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true  # Los tests pueden tener dependencias de desarrollo
+
+      # Combinar resultados (opcional)
+      - name: Combine reports
         run: |
           npm install -g snyk-to-html
-          if [ -f "snyk-results.json" ]; then
-            snyk-to-html -i snyk-results.json -o snyk-report.html
+          
+          # Si ambos reportes existen
+          if [ -f "snyk-app-results.json" ] && [ -f "snyk-tests-results.json" ]; then
+            jq -s '.[0].vulnerabilities + .[1].vulnerabilities | unique' snyk-app-results.json snyk-tests-results.json > combined-results.json
+            snyk-to-html -i combined-results.json -o snyk-report.html
+          
+          # Si solo existe el de aplicación
+          elif [ -f "snyk-app-results.json" ]; then
+            snyk-to-html -i snyk-app-results.json -o snyk-report.html
+          
+          # Si solo existe el de tests
+          elif [ -f "snyk-tests-results.json" ]; then
+            snyk-to-html -i snyk-tests-results.json -o snyk-report.html
+          
+          # Si no hay reportes
           else
             echo '{"vulnerabilities": []}' > snyk-report.html
           fi

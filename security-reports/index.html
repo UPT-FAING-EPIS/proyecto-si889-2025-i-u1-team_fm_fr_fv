@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Reports Dashboard - DictApp</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f7fa;
+        }
+        h1 {
+            color: #0366d6;
+        }
+        .report {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .report h2 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .report a {
+            display: inline-block;
+            text-decoration: none;
+            color: white;
+            background-color: #0366d6;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .report a:hover {
+            background-color: #0056b3;
+        }
+        .timestamp {
+            color: #666;
+            font-style: italic;
+            margin-top: 20px;
+        }
+        .project-info {
+            background-color: #e1f5fe;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Security Reports Dashboard - DictApp</h1>
+    
+    <div class="project-info">
+        <h2>Project Information</h2>
+        <p><strong>Repository:</strong> proyecto-si889-2025-i-u1-team_fm_fr_fv</p>
+        <p><strong>Analysis Date:</strong> $(date)</p>
+        <p><strong>Components Analyzed:</strong> DataDicGen.Application, DataDicGen.Domain, DataDicGen.Infrastructure, DataDicGen.WebAPI</p>
+    </div>
+    
+    <div class="report">
+        <h2>Semgrep Code Analysis</h2>
+        <p>Results of static code analysis performed by Semgrep on C# code.</p>
+        <p>This analysis helps identify potential security issues, bugs, and code quality problems in your C# source code.</p>
+        <a href="reports/semgrep-report.html" target="_blank">View Semgrep Report</a>
+    </div>
+    
+    <div class="report">
+        <h2>Snyk Dependency Analysis</h2>
+        <p>Results of dependency scanning performed by Snyk on your .NET projects.</p>
+        <p>This analysis identifies known vulnerabilities in your project dependencies that could pose security risks.</p>
+        <a href="reports/snyk-report.html" target="_blank">View Snyk Report</a>
+    </div>
+    
+    <div class="timestamp">
+        Last updated: $(date)
+    </div>
+</body>
+</html>

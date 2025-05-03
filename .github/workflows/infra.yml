@@ -14,9 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Login a Azure
-        run: | 
-          az login -u ${{ secrets.AZURE_USERNAME }} -p ${{ secrets.AZURE_PASSWORD }}
+      - name: Login a Azure (Service Principal)
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Crear terraform.tfvars
         run: |

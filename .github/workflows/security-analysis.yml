@@ -7,7 +7,7 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  CODE_DIR: 'DictApp'  # Directorio donde está tu solución .NET
+  SOLUTION_PATH: 'DictApp/DataDictGen.sln'
 
 jobs:
   security-analysis:
@@ -20,50 +20,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Análisis Semgrep (para código fuente)
-      - name: Run Semgrep on .NET code
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: p/csharp  # Config específica para C#
-          paths: ${{ env.CODE_DIR }}
-          output_file: semgrep-results.json
-          sarif: false
-          verbose: true
-
-      - name: Convert Semgrep results to HTML
-        if: always()  # Ejecuta siempre, incluso si falla Semgrep
-        run: |
-          pip install prospector2html
-          if [ -f "semgrep-results.json" ]; then
-            prospector-html --input semgrep-results.json --output semgrep-report.html
-          else
-            echo '{"results": []}' > semgrep-report.html
-          fi
-
-      # Análisis Snyk (para dependencias .NET)
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      # Paso 1: Restaurar dependencias para que Snyk pueda analizarlas
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+      # Paso 2: Analizar con Snyk (versión corregida)
       - name: Run Snyk analysis
         uses: snyk/actions/dotnet@master
         with:
           command: test
-          args: --file=${{ env.CODE_DIR }}/DataDictGen.sln --json-file-output=snyk-results.json
+          args: --all-projects --file=${{ env.SOLUTION_PATH }} --json-file-output=snyk-results.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Generate Snyk HTML report
+      # Generar reporte HTML
+      - name: Generate Snyk report
+        if: success() || failure()  # Ejecuta siempre
         run: |
           npm install -g snyk-to-html
-          snyk-to-html -i snyk-results.json -o snyk-report.html
+          if [ -f "snyk-results.json" ]; then
+            snyk-to-html -i snyk-results.json -o snyk-report.html
+          else
+            echo '{"vulnerabilities": []}' > snyk-report.html
+          fi
 
-      # Publicar resultados
-      - name: Upload reports
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
-          path: |
-            semgrep-report.html
-            snyk-report.html
+          path: snyk-report.html

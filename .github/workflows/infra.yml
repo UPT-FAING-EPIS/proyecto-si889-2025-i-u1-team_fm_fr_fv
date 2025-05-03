@@ -1,0 +1,205 @@
+name: Construcción y Despliegue de Infraestructura en Azure
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra.yml'
+  workflow_dispatch:
+
+jobs:
+  Deploy-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Login a Azure
+        run: | 
+          az login -u ${{ secrets.AZURE_USERNAME }} -p ${{ secrets.AZURE_PASSWORD }}
+      
+      - name: Crear terraform.tfvars
+        run: |
+          cd infra
+          echo "suscription_id=\"${{ secrets.SUSCRIPTION_ID }}\"" > terraform.tfvars
+          echo "sqladmin_username=\"${{ secrets.SQL_USER }}\"" >> terraform.tfvars
+          echo "sqladmin_password=\"${{ secrets.SQL_PASS }}\"" >> terraform.tfvars
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Terraform Init
+        id: init
+        run: cd infra && terraform init 
+      
+      - name: Terraform Validate
+        id: validate
+        run: cd infra && terraform validate -no-color
+      
+      - name: Terraform Plan
+        run: cd infra && terraform plan -var="suscription_id=${{ secrets.SUSCRIPTION_ID }}" -var="sqladmin_username=${{ secrets.SQL_USER }}" -var="sqladmin_password=${{ secrets.SQL_PASS }}" -no-color -out main.tfplan
+
+      - name: Crear String Output
+        id: tf-plan-string
+        run: |
+            TERRAFORM_PLAN=$(cd infra && terraform show -no-color main.tfplan)
+            delimiter="$(openssl rand -hex 8)"
+            echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+            echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
+            echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo '```terraform' >> $GITHUB_OUTPUT
+            echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+            echo '```' >> $GITHUB_OUTPUT
+            echo "</details>" >> $GITHUB_OUTPUT
+            echo "${delimiter}" >> $GITHUB_OUTPUT
+      
+      - name: Publicar Terraform Plan en el Resumen
+        env:
+          SUMMARY: ${{ steps.tf-plan-string.outputs.summary }}
+        run: |
+          echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Obtener Variables
+        id: vars
+        run: |
+            echo "terramaid_version=$(curl -s https://api.github.com/repos/RoseSecurity/Terramaid/releases/latest | grep tag_name | cut -d '"' -f 4)" >> $GITHUB_OUTPUT
+            case "${{ runner.arch }}" in
+            "X64" )
+                echo "arch=x86_64" >> $GITHUB_OUTPUT
+                ;;
+            "ARM64" )
+                echo "arch=arm64" >> $GITHUB_OUTPUT
+                ;;
+            esac
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Setup Terramaid
+        run: |
+            curl -L -o /tmp/terramaid.tar.gz "https://github.com/RoseSecurity/Terramaid/releases/download/${{ steps.vars.outputs.terramaid_version }}/Terramaid_Linux_${{ steps.vars.outputs.arch }}.tar.gz"
+            tar -xzvf /tmp/terramaid.tar.gz -C /tmp
+            mv -v /tmp/Terramaid /usr/local/bin/terramaid
+            chmod +x /usr/local/bin/terramaid
+      
+      - name: Generar Gráfico Terramaid
+        id: terramaid
+        run: |
+            cd infra
+            /usr/local/bin/terramaid run
+      
+      - name: Publicar Gráfico en Resumen
+        run: |
+            echo "## Terramaid Graph" >> $GITHUB_STEP_SUMMARY
+            cat infra/Terramaid.md >> $GITHUB_STEP_SUMMARY 
+      
+      - name: Setup Graphviz
+        uses: ts-graphviz/setup-graphviz@v2        
+
+      - name: Setup Inframap
+        run: |
+            curl -L -o /tmp/inframap.tar.gz "https://github.com/cycloidio/inframap/releases/download/v0.7.0/inframap-linux-amd64.tar.gz"
+            tar -xzvf /tmp/inframap.tar.gz -C /tmp
+            mv -v /tmp/inframap-linux-amd64 /usr/local/bin/inframap
+            chmod +x /usr/local/bin/inframap
+      
+      - name: Generar Gráfico Inframap
+        run: |
+            cd infra
+            /usr/local/bin/inframap generate main.tf --raw | dot -Tsvg > inframap_azure.svg
+      
+      - name: Subir Inframap como Artefacto
+        id: inframap-upload-step
+        uses: actions/upload-artifact@v4
+        with:
+          name: inframap_azure.svg
+          path: infra/inframap_azure.svg
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+            api-key: ${{ secrets.INFRACOST_API_KEY }}
+      
+      - name: Generar Informe de Costos
+        run: |
+            cd infra
+            infracost breakdown --path . --format html --out-file infracost-report.html
+            sed -i '19,137d' infracost-report.html
+            sed -i 's/$0/$ 0/g' infracost-report.html
+      
+      - name: Convertir HTML a Markdown
+        id: html2markdown
+        uses: rknj/html2markdown@v1.1.0
+        with:
+            html-file: "infra/infracost-report.html"
+
+      - name: Subir Informe de Costos
+        run: |
+            echo "## infracost Report" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.html2markdown.outputs.markdown-content }}" >> infracost.md
+            cat infracost.md >> $GITHUB_STEP_SUMMARY
+      
+      - name: Aprobar Plan de Terraform
+        run: |
+            cd infra
+            terraform apply -var="suscription_id=${{ secrets.SUSCRIPTION_ID }}" -var="sqladmin_username=${{ secrets.SQL_USER }}" -var="sqladmin_password=${{ secrets.SQL_PASS }}" -auto-approve main.tfplan
+      
+      # Pasos de despliegue para la aplicación después de crear la infraestructura
+      - name: Obtener Información de Salida
+        id: outputs
+        run: |
+          cd infra
+          echo "APP_SERVICE_NAME=$(terraform output -raw app_service_name)" >> $GITHUB_OUTPUT
+          echo "RESOURCE_GROUP=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "SQL_SERVER=$(terraform output -raw sql_server_name)" >> $GITHUB_OUTPUT
+          echo "SQL_DB=$(terraform output -raw sql_database_name)" >> $GITHUB_OUTPUT
+      
+      - name: Configurar .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Restaurar Dependencias
+        run: dotnet restore DictApp/DataDictGen.sln
+      
+      - name: Compilar para Producción
+        run: dotnet build DictApp/DataDictGen.sln --configuration Release --no-restore
+      
+      - name: Publicar WebAPI
+        run: |
+          dotnet publish DictApp/DataDicGen.WebAPI/DataDicGen.WebAPI.csproj -c Release -o ./publish
+      
+      - name: Configurar Cadena de Conexión
+        run: |
+          # Obtener la cadena de conexión usando Azure CLI
+          CONNECTION_STRING=$(az sql db show-connection-string --client ado.net --server ${{ steps.outputs.outputs.SQL_SERVER }} --name ${{ steps.outputs.outputs.SQL_DB }} --auth-type SqlPassword)
+          
+          # Reemplazar placeholders con valores reales
+          CONNECTION_STRING=${CONNECTION_STRING//Username=${{ secrets.SQL_USER }}/}
+          CONNECTION_STRING=${CONNECTION_STRING//Password=${{ secrets.SQL_PASS }}/}
+          
+          # Actualizar configuración en la aplicación publicada
+          echo "Configurando cadena de conexión para la aplicación..."
+          sed -i "s|\"DefaultConnection\": \".*\"|\"DefaultConnection\": \"$CONNECTION_STRING\"|g" ./publish/appsettings.json
+      
+      - name: Desplegar en Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ steps.outputs.outputs.APP_SERVICE_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: ./publish
+      
+      - name: Limpiar Recursos Temporales
+        if: always()
+        run: |
+          rm -rf ./publish
+      
+      - name: Resumen de Despliegue
+        run: |
+          echo "## Resumen del Despliegue" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Infraestructura desplegada correctamente" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Aplicación Web desplegada en: https://${{ steps.outputs.outputs.APP_SERVICE_NAME }}.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Base de datos SQL desplegada: ${{ steps.outputs.outputs.SQL_DB }}" >> $GITHUB_STEP_SUMMARY

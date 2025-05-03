@@ -1,30 +1,52 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Security Reports</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Reports Dashboard</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #0366d6; }
-        .report { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f7fa;
+        }
+        h1 {
+            color: #0366d6;
+        }
+        .report {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 10px 0;
+        }
+        .report h2 {
+            color: #333;
+        }
+        .report a {
+            text-decoration: none;
+            color: #0366d6;
+            font-weight: bold;
+        }
+        .report a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-    <h1>Security Analysis Reports</h1>
+    <h1>Security Reports Dashboard</h1>
+
     <div class="report">
         <h2>Semgrep Code Analysis</h2>
-        <a href="reports/semgrep-report.html">View Report</a>
+        <p>View the results of the Semgrep static code analysis.</p>
+        <a href="reports/semgrep-report.html" target="_blank">View Semgrep Report</a>
     </div>
+
     <div class="report">
         <h2>Snyk - Application Layer</h2>
-        <a href="reports/snyk-app-report.html">View Report</a>
+        <p>View the results of the Snyk security test for the application layer.</p>
+        <a href="reports/snyk-report.html" target="_blank">View Snyk Report</a>
     </div>
-    <div class="report">
-        <h2>Snyk - Domain Layer</h2>
-        <a href="reports/snyk-domain-report.html">View Report</a>
-    </div>
-    <div class="report">
-        <h2>Snyk - Infrastructure</h2>
-        <a href="reports/snyk-infra-report.html">View Report</a>
-    </div>
+
 </body>
 </html>

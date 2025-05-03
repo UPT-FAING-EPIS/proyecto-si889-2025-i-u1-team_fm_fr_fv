@@ -1,0 +1,81 @@
+name: Build, Test and Analyze
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-test-analyze:
+    runs-on: ubuntu-latest
+    name: CI Pipeline with SonarCloud
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Needed for SonarCloud analysis
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore DictApp/DataDictGen.sln
+
+      - name: Build solution
+        run: dotnet build DictApp/DataDictGen.sln --configuration Debug
+
+      - name: Run tests with XPlat Code Coverage
+        run: |
+          dotnet test DictApp/DataDictGen.Tests/DataDictGen.Tests.csproj \
+            --no-restore \
+            --no-build \
+            --configuration Debug \
+            --collect:"XPlat Code Coverage" \
+            --logger trx
+
+      - name: List coverage files (debug)
+        run: find . -name coverage.cobertura.xml || echo "No coverage files found"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Generate coverage report
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          reportgenerator \
+            -reports:"**/coverage.cobertura.xml" \
+            -targetdir:CoverageReport \
+            -reporttypes:Html
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: CoverageReport
+
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Run SonarCloud analysis
+        run: |
+          dotnet sonarscanner begin \
+            /k:"mario-flores_apitestnet" \
+            /o:"mario-flores" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
+            /d:sonar.coverage.exclusions="**Tests*.cs"
+          
+          dotnet build DictApp/DataDictGen.sln --configuration Release
+          
+          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

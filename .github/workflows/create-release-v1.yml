@@ -1,0 +1,59 @@
+name: Crear Release para v1.1.x
+
+on:
+  push:
+    tags:
+      - 'v1.1.*'  # Se ejecuta solo para tags que cumplan el patrón v1.1.x
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Necesario para obtener historial de commits
+      
+      - name: Obtener versión del tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Generar notas de la versión
+        id: release_notes
+        run: |
+          # Determinar el tag anterior
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.get_version.outputs.VERSION }}^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            # Si no hay tag anterior, usar todos los commits
+            NOTES=$(git log --pretty=format:"* %s (%h)" ${{ steps.get_version.outputs.VERSION }})
+          else
+            # Si hay tag anterior, usar commits entre los tags
+            NOTES=$(git log --pretty=format:"* %s (%h)" $PREV_TAG..${{ steps.get_version.outputs.VERSION }})
+          fi
+          
+          # Crear texto para las notas de la versión con formato
+          RELEASE_NOTES="## Cambios en ${{ steps.get_version.outputs.VERSION }}\n\n"
+          RELEASE_NOTES+="$NOTES\n\n"
+          RELEASE_NOTES+="### Enlaces\n"
+          RELEASE_NOTES+="* [Paquetes NuGet](https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv/packages)\n"
+          RELEASE_NOTES+="* [Documentación](https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv/tree/main#readme)\n"
+          
+          # Guardar notas para el siguiente paso
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: "Versión ${{ steps.get_version.outputs.VERSION }}"
+          body: ${{ steps.release_notes.outputs.NOTES }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

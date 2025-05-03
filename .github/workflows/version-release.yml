@@ -1,0 +1,35 @@
+name: Crear Release 
+
+on:
+  push:
+    tags:
+      - 'v*'  # Se activa con cualquier tag que empiece con v
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Obtener versión del tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: "Versión ${{ steps.get_version.outputs.VERSION }}"
+          body: |
+            # Versión ${{ steps.get_version.outputs.VERSION }}
+            
+            Fecha: $(date +%d-%m-%Y)
+            
+            ## Enlaces
+            
+            * [Paquetes NuGet](https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv/packages)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

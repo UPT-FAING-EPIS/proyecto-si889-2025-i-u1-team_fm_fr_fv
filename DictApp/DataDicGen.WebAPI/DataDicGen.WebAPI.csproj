@@ -4,8 +4,19 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-<GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    
+    <!-- Propiedades NuGet -->
+    <PackageId>Marant7.DataDicGen.WebAPI</PackageId>
+    <Authors>marant7</Authors>
+    <Company>UPT</Company>
+    <Description>API web para el generador de diccionarios de datos</Description>
+    <PackageTags>datadictionary;api;webapi</PackageTags>
+    <RepositoryUrl>https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

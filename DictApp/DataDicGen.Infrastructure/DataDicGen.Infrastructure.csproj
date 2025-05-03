@@ -6,10 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
-<PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
-<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.3" />
-<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.3" />
-<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.3">
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.3">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -21,6 +21,16 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- Propiedades NuGet -->
+    <PackageId>Marant7.DataDicGen.Infrastructure</PackageId>
+    <Authors>marant7</Authors>
+    <Company>UPT</Company>
+    <Description>Capa de infraestructura para el generador de diccionarios de datos</Description>
+    <PackageTags>datadictionary;infrastructure;database</PackageTags>
+    <RepositoryUrl>https://github.com/marant7/proyecto-si889-2025-i-u1-team_fm_fr_fv</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
 </Project>

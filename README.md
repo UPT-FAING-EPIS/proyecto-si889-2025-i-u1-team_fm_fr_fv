@@ -14,7 +14,7 @@
 
 # **APLICACIÓN PARA LA GENERACIÓN AUTOMATIZADA DE UN DICCIONARIO DE DATOS**
 
-## **Curso:** Inteligencia de Negocios  
+## **Curso:** Patrones de Diseño 
 ## **Docente:** Mag. Patrick Cuadros Quiroga  
 
 ---
